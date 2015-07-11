@@ -1,2 +1,2 @@
 # dsm_pytools
-My tools wrote on python3
+My tools on python3
