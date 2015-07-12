@@ -9,6 +9,7 @@ Descriptions
 .. contents::
    :depth: 1
    :backlinks: top
+   :local:
 
 daemon.py
 ---------
