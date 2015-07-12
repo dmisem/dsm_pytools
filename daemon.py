@@ -1,8 +1,7 @@
+import os
 from sys import exit, stderr, stdout, stdin
 from time import sleep
-import os
-import time
-import atexit
+from atexit import register
 from signal import SIGTERM
 
 
@@ -97,7 +96,7 @@ class Daemon:
         os.dup2(se.fileno(), stderr.fileno())
 
         # write pidfile
-        atexit.register(self.delpid)
+        register(self.delpid)
         pid = str(os.getpid())
         open(self.pidfile, 'w+').write("%s\n" % pid)
 
@@ -144,7 +143,7 @@ class Daemon:
         try:
             while 1:
                 os.kill(pid, SIGTERM)
-                time.sleep(0.1)
+                sleep(0.1)
         except(OSError) as err:
             err = str(err)
             if err.find("No such process") > 0:
