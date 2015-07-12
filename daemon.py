@@ -1,8 +1,25 @@
-import sys
+from sys import exit, stderr, stdout, stdin
 import os
 import time
 import atexit
 from signal import SIGTERM
+
+
+def daemon_decor(pidfile, **std):
+
+    def decor(func):
+
+        def act(action):
+            res = daemon_exec(func, action, pidfile, **std)
+            return res
+        return act
+    return decor
+
+
+def daemon_exec(func, action, pidfile, **std):
+    if action not in DMN_Actions:
+        raise DMN_UnknownActionException(action)
+    DMN_Actions[action](pidfile, func, **std)
 
 
 class Daemon:
@@ -29,11 +46,10 @@ class Daemon:
             pid = os.fork()
             if pid > 0:
                 # exit first parent
-                sys.exit(0)
+                exit(0)
         except(OSError) as e:
-            sys.stderr.write("fork #1 failed: %d (%s)\n" %
-                             (e.errno, e.strerror))
-            sys.exit(1)
+            stderr.write("fork #1 failed: %d (%s)\n" % (e.errno, e.strerror))
+            exit(1)
 
         # decouple from parent environment
         os.chdir("/")
@@ -45,21 +61,20 @@ class Daemon:
             pid = os.fork()
             if pid > 0:
                 # exit from second parent
-                sys.exit(0)
+                exit(0)
         except(OSError) as e:
-            sys.stderr.write("fork #2 failed: %d (%s)\n" %
-                             (e.errno, e.strerror))
-            sys.exit(1)
+            stderr.write("fork #2 failed: %d (%s)\n" % (e.errno, e.strerror))
+            exit(1)
 
         # redirect standard file descriptors
-        sys.stdout.flush()
-        sys.stderr.flush()
+        stdout.flush()
+        stderr.flush()
         si = open(self.stdin, 'r')
         so = open(self.stdout, 'a+')
         se = open(self.stderr, 'a+')
-        os.dup2(si.fileno(), sys.stdin.fileno())
-        os.dup2(so.fileno(), sys.stdout.fileno())
-        os.dup2(se.fileno(), sys.stderr.fileno())
+        os.dup2(si.fileno(), stdin.fileno())
+        os.dup2(so.fileno(), stdout.fileno())
+        os.dup2(se.fileno(), stderr.fileno())
 
         # write pidfile
         atexit.register(self.delpid)
@@ -82,8 +97,8 @@ class Daemon:
 
         if pid:
             message = "pidfile %s already exist. Daemon already running?\n"
-            sys.stderr.write(message % self.pidfile)
-            sys.exit(1)
+            stderr.write(message % self.pidfile)
+            exit(1)
 
         # Start the daemon
         self.daemonize()
@@ -102,7 +117,7 @@ class Daemon:
 
         if not pid:
             message = "pidfile %s does not exist. Daemon not running?\n"
-            sys.stderr.write(message % self.pidfile)
+            stderr.write(message % self.pidfile)
             return  # not an error in a restart
 
         # Try killing the daemon process
@@ -117,7 +132,7 @@ class Daemon:
                     os.remove(self.pidfile)
             else:
                 print(err)
-                sys.exit(1)
+                exit(1)
 
     def restart(self):
         """
@@ -132,3 +147,36 @@ class Daemon:
         It will be called after the process has been
         daemonized by start() or restart().
         """
+
+
+class DMN_UnknownActionException(Exception):
+     def __init__(self, action):
+         self.action = action
+
+     def __str__(self):
+         return("Unknown action '{0}'\n    Action should be in {1}".
+                format(self.action, tuple(DMN_Actions.keys())))
+
+
+def daemon_start(pidfile, func, **std):
+    class DmnDecor(Daemon):
+        def run(self):
+            func()
+    DmnDecor(pidfile, **std).start()
+
+
+def daemon_stop(pidfile, func = None, **std):
+    Daemon(pidfile, **std).stop()
+
+
+def daemon_restart(pidfile, func, **std):
+    class DmnDecor(Daemon):
+        def run(self):
+            func()
+    DmnDecor(pidfile, **std).restart()
+
+
+DMN_Actions = {
+    'start': daemon_start,
+    'stop': daemon_stop,
+    'restart': daemon_restart}
