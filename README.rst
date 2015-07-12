@@ -3,12 +3,12 @@ dsm_pytools
 ###########
 My collection of tools written in python3 or adapted to python3
 
-.. contents::
-   :depth: 2
-   :backlinks: top
-
 Descriptions
 ============
+
+.. contents::
+   :depth: 1
+   :backlinks: top
 
 daemon.py
 ---------
