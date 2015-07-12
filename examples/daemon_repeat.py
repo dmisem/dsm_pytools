@@ -2,8 +2,7 @@
 from sys import argv
 from os import getenv
 from os.path import join
-from dsm_pytools.daemon import daemon_decor
-from time import sleep
+from dsm_pytools.daemon import repeat_daemon_decor as rdd
 
 
 fn = join(getenv('HOME'), 'daemon_example')
@@ -11,11 +10,9 @@ out = {'stdout': fn + '.log'}
 action = None if len(argv) == 1 else argv[1]
 
 
-@daemon_decor(fn + '.pid', **out)
+@rdd(5, fn + '.pid', **out)
 def dmn_example():
-    while True:
-        print('testing daemon ...')
-        sleep(5)
+    print('testing daemon ...')
 
 
 dmn_example(action)

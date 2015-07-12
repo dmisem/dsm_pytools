@@ -17,5 +17,6 @@ daemon.py
 Daemonizer for project.
 
 It can be used as function or as decorator.
+There is a decorator that repeats function.
 
 Details are in examples (inside examples folder)

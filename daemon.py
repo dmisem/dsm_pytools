@@ -1,8 +1,28 @@
 from sys import exit, stderr, stdout, stdin
+from time import sleep
 import os
 import time
 import atexit
 from signal import SIGTERM
+
+
+def repeat_daemon_decor(sleep_time, pidfile, times=0, **std):
+
+    def decor(func):
+
+        def new_func():
+            i = 1
+            while (not times) or (i <= times):
+                func()
+                sleep(sleep_time)
+                i += 1
+
+        def act(action):
+            res = daemon_exec(new_func, action, pidfile, **std)
+            return res
+
+        return act
+    return decor
 
 
 def daemon_decor(pidfile, **std):
@@ -150,12 +170,12 @@ class Daemon:
 
 
 class DMN_UnknownActionException(Exception):
-     def __init__(self, action):
-         self.action = action
+    def __init__(self, action):
+        self.action = action
 
-     def __str__(self):
-         return("Unknown action '{0}'\n    Action should be in {1}".
-                format(self.action, tuple(DMN_Actions.keys())))
+    def __str__(self):
+        s = "Unknown action '{0}'\n    Action should be in {1}"
+        return s.format(self.action, tuple(DMN_Actions.keys()))
 
 
 def daemon_start(pidfile, func, **std):
@@ -165,7 +185,7 @@ def daemon_start(pidfile, func, **std):
     DmnDecor(pidfile, **std).start()
 
 
-def daemon_stop(pidfile, func = None, **std):
+def daemon_stop(pidfile, func=None, **std):
     Daemon(pidfile, **std).stop()
 
 
