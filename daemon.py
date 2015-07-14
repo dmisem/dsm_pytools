@@ -1,3 +1,6 @@
+"""
+Daemonizing tools.
+"""
 import os
 from sys import exit, stderr, stdout, stdin
 from time import sleep
@@ -5,44 +8,16 @@ from atexit import register
 from signal import SIGTERM
 
 
-def repeat_decor(sleep_time, times=0):
-
-    def decor(func):
-
-        def new_func():
-            i = 1
-            while (not times) or (i <= times):
-                func()
-                sleep(sleep_time)
-        return new_func
-    return decor
-
-
-def repeat_daemon_decor(sleep_time, pidfile, times=0, **std):
-
-    def decor(func):
-        new_func = repeat_decor(sleep_time, times)(func)
-
-        def act(action):
-            res = daemon_exec(new_func, action, pidfile, **std)
-            return res
-
-        return act
-    return decor
-
-
-def daemon_decor(pidfile, **std):
-
-    def decor(func):
-
-        def act(action):
-            res = daemon_exec(func, action, pidfile, **std)
-            return res
-        return act
-    return decor
-
-
 def daemon_exec(func, action, pidfile, **std):
+    """ Implements daemon action ('start', 'stop', etc.) relative to func
+
+    Arguments:
+    func -- function object (infinite loop) to daemonize.
+    action -- daemon action. See DMN_Actions for details.
+    pidfile -- full name of file for keeping pid
+    std -- dict with ('stdin', 'stdout', 'stderr') keys to redirect stream.
+        Default is '/dev/null'
+    """
     if action not in DMN_Actions:
         raise DMN_UnknownActionException(action)
     DMN_Actions[action](pidfile, func, **std)
@@ -176,6 +151,7 @@ class Daemon:
 
 
 class DMN_UnknownActionException(Exception):
+    """ Exception for wrong action """
     def __init__(self, action):
         self.action = action
 
@@ -184,18 +160,21 @@ class DMN_UnknownActionException(Exception):
         return s.format(self.action, tuple(DMN_Actions.keys()))
 
 
-def daemon_start(pidfile, func, **std):
+def _daemon_start(pidfile, func, **std):
+    """ Starts func as daemon as write pif to pidfile"""
     class DmnDecor(Daemon):
         def run(self):
             func()
     DmnDecor(pidfile, **std).start()
 
 
-def daemon_stop(pidfile, func=None, **std):
+def _daemon_stop(pidfile, func=None, **std):
+    """ Stop daemon with pid from pidfile """
     Daemon(pidfile, **std).stop()
 
 
-def daemon_restart(pidfile, func, **std):
+def _daemon_restart(pidfile, func, **std):
+    """ Restart func as daemon with pid from pidfile """
     class DmnDecor(Daemon):
         def run(self):
             func()
@@ -203,6 +182,6 @@ def daemon_restart(pidfile, func, **std):
 
 
 DMN_Actions = {
-    'start': daemon_start,
-    'stop': daemon_stop,
-    'restart': daemon_restart}
+    'start': _daemon_start,
+    'stop': _daemon_stop,
+    'restart': _daemon_restart}

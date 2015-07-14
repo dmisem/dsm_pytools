@@ -13,7 +13,7 @@ action = None if len(argv) == 1 else argv[1]
 
 def dmn_example(*arg):
     while True:
-        print('testing daemon ...')
+        print('testing daemon_func ...')
         sleep(5)
 
 

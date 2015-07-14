@@ -2,7 +2,7 @@
 from sys import argv
 from os import getenv
 from os.path import join
-from dsm_pytools.daemon import daemon_decor
+from dsm_pytools.decor import daemon
 from time import sleep
 
 
@@ -11,10 +11,10 @@ out = {'stdout': fn + '.log'}
 action = None if len(argv) == 1 else argv[1]
 
 
-@daemon_decor(fn + '.pid', **out)
+@daemon(fn + '.pid', **out)
 def dmn_example():
     while True:
-        print('testing daemon ...')
+        print('testing daemon_decor ...')
         sleep(5)
 
 
