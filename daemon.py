@@ -5,7 +5,7 @@ from atexit import register
 from signal import SIGTERM
 
 
-def repeat_daemon_decor(sleep_time, pidfile, times=0, **std):
+def repeat_decor(sleep_time, times=0):
 
     def decor(func):
 
@@ -14,7 +14,14 @@ def repeat_daemon_decor(sleep_time, pidfile, times=0, **std):
             while (not times) or (i <= times):
                 func()
                 sleep(sleep_time)
-                i += 1
+        return new_func
+    return decor
+
+
+def repeat_daemon_decor(sleep_time, pidfile, times=0, **std):
+
+    def decor(func):
+        new_func = repeat_decor(sleep_time, times)(func)
 
         def act(action):
             res = daemon_exec(new_func, action, pidfile, **std)
@@ -135,7 +142,7 @@ class Daemon:
             pid = None
 
         if not pid:
-            message = "pidfile %s does not exist. Daemon not running?\n"
+            message = "pidfile %s does not exist. Daemon is not running?\n"
             stderr.write(message % self.pidfile)
             return  # not an error in a restart
 
@@ -146,7 +153,7 @@ class Daemon:
                 sleep(0.1)
         except(OSError) as err:
             err = str(err)
-            if err.find("No such process") > 0:
+            if ("No such process" in err) or ("Немає такого процесу" in err):
                 if os.path.exists(self.pidfile):
                     os.remove(self.pidfile)
             else:
