@@ -2,13 +2,16 @@
 Daemonizing tools.
 """
 import os
-from sys import exit, stderr, stdout, stdin
+import sys
 from time import sleep
 from atexit import register
 from signal import SIGTERM
 
 
-def daemon_exec(func, action, pidfile, **std):
+_std = '/dev/null'
+
+
+def daemon_exec(func, action, pidfile, stdin=_std, stdout=_std, stderr=_std):
     """ Implements daemon action ('start', 'stop', etc.) relative to func
 
     Arguments:
@@ -20,23 +23,14 @@ def daemon_exec(func, action, pidfile, **std):
     """
     if action not in DMN_Actions:
         raise DMN_UnknownActionException(action)
-    DMN_Actions[action](pidfile, func, **std)
+    DMN_Actions[action](pidfile, func, stdin, stdout, stderr)
 
 
 class Daemon:
     """
-    A generic daemon class.
-
-    Usage: subclass the Daemon class and override the run() method
+    A Class to  daemonizing function func.
     """
-    def __init__(self, pidfile, stdin='/dev/null',
-                 stdout='/dev/null', stderr='/dev/null'):
-        self.stdin = stdin
-        self.stdout = stdout
-        self.stderr = stderr
-        self.pidfile = pidfile
-
-    def daemonize(self):
+    def daemonize(self, pidfile, stdin, stdout, stderr):
         """
         do the UNIX double-fork magic,
         see Stevens' "Advanced Programming in the UNIX Environment"
@@ -47,10 +41,11 @@ class Daemon:
             pid = os.fork()
             if pid > 0:
                 # exit first parent
-                exit(0)
+                sys.exit(0)
         except(OSError) as e:
-            stderr.write("fork #1 failed: %d (%s)\n" % (e.errno, e.strerror))
-            exit(1)
+            sys.stderr.write("fork #1 failed: %d (%s)\n" %
+                             (e.errno, e.strerror))
+            sys.exit(1)
 
         # decouple from parent environment
         os.chdir("/")
@@ -62,63 +57,61 @@ class Daemon:
             pid = os.fork()
             if pid > 0:
                 # exit from second parent
-                exit(0)
+                sys.exit(0)
         except(OSError) as e:
-            stderr.write("fork #2 failed: %d (%s)\n" % (e.errno, e.strerror))
-            exit(1)
+            sys.stderr.write("fork #2 failed: %d (%s)\n" %
+                             (e.errno, e.strerror))
+            sys.exit(1)
 
         # redirect standard file descriptors
-        stdout.flush()
-        stderr.flush()
-        si = open(self.stdin, 'r')
-        so = open(self.stdout, 'a+')
-        se = open(self.stderr, 'a+')
-        os.dup2(si.fileno(), stdin.fileno())
-        os.dup2(so.fileno(), stdout.fileno())
-        os.dup2(se.fileno(), stderr.fileno())
+        sys.stdout.flush()
+        sys.stderr.flush()
+        si = open(stdin, 'r')
+        so = open(stdout, 'a+')
+        se = open(stderr, 'a+')
+        os.dup2(si.fileno(), sys.stdin.fileno())
+        os.dup2(so.fileno(), sys.stdout.fileno())
+        os.dup2(se.fileno(), sys.stderr.fileno())
 
         # write pidfile
-        register(self.delpid)
+        register(lambda: os.remove(pidfile))
         pid = str(os.getpid())
-        open(self.pidfile, 'w+').write("%s\n" % pid)
+        open(pidfile, 'w+').write("%s\n" % pid)
 
-    def delpid(self):
-        os.remove(self.pidfile)
-
-    def start(self):
+    def start(self, pidfile, func, stdin=_std, stdout=_std, stderr=_std):
         """
         Start the daemon
         """
         # Check for a pidfile to see if the daemon already runs
         try:
-            with open(self.pidfile, 'r') as pf:
+            with open(pidfile, 'r') as pf:
                 pid = int(pf.read().strip())
         except(IOError):
             pid = None
 
         if pid:
             message = "pidfile %s already exist. Daemon already running?\n"
-            stderr.write(message % self.pidfile)
-            exit(1)
+            sys.stderr.write(message % pidfile)
+            sys.exit(1)
 
         # Start the daemon
-        self.daemonize()
-        self.run()
+        self.daemonize(pidfile, stdin, stdout, stderr)
+        func()
 
-    def stop(self):
+    def stop(self, pidfile, func=None, stdin=_std, stdout=_std, stderr=_std):
         """
         Stop the daemon
         """
         # Get the pid from the pidfile
         try:
-            with open(self.pidfile, 'r') as pf:
+            with open(pidfile, 'r') as pf:
                 pid = int(pf.read().strip())
         except(IOError):
             pid = None
 
         if not pid:
             message = "pidfile %s does not exist. Daemon is not running?\n"
-            stderr.write(message % self.pidfile)
+            sys.stderr.write(message % pidfile)
             return  # not an error in a restart
 
         # Try killing the daemon process
@@ -129,25 +122,24 @@ class Daemon:
         except(OSError) as err:
             err = str(err)
             if ("No such process" in err) or ("Немає такого процесу" in err):
-                if os.path.exists(self.pidfile):
-                    os.remove(self.pidfile)
+                if os.path.exists(pidfile):
+                    os.remove(pidfile)
             else:
                 print(err)
-                exit(1)
+                sys.exit(1)
 
-    def restart(self):
+    def restart(self, pidfile, func, stdin=_std, stdout=_std, stderr=_std):
         """
         Restart the daemon
         """
-        self.stop()
-        self.start()
+        self.stop(pidfile)
+        self.start(pidfile, func, stdin, stdout, stderr)
 
-    def run(self):
-        """
-        You should override this method when you subclass Daemon.
-        It will be called after the process has been
-        daemonized by start() or restart().
-        """
+
+DMN_Actions = {
+    'start': Daemon().start,
+    'stop': Daemon().stop,
+    'restart': Daemon().restart}
 
 
 class DMN_UnknownActionException(Exception):
@@ -158,30 +150,3 @@ class DMN_UnknownActionException(Exception):
     def __str__(self):
         s = "Unknown action '{0}'\n    Action should be in {1}"
         return s.format(self.action, tuple(DMN_Actions.keys()))
-
-
-def _daemon_start(pidfile, func, **std):
-    """ Starts func as daemon as write pif to pidfile"""
-    class DmnDecor(Daemon):
-        def run(self):
-            func()
-    DmnDecor(pidfile, **std).start()
-
-
-def _daemon_stop(pidfile, func=None, **std):
-    """ Stop daemon with pid from pidfile """
-    Daemon(pidfile, **std).stop()
-
-
-def _daemon_restart(pidfile, func, **std):
-    """ Restart func as daemon with pid from pidfile """
-    class DmnDecor(Daemon):
-        def run(self):
-            func()
-    DmnDecor(pidfile, **std).restart()
-
-
-DMN_Actions = {
-    'start': _daemon_start,
-    'stop': _daemon_stop,
-    'restart': _daemon_restart}
